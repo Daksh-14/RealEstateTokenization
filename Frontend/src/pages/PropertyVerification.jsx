@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Building2, FileText, CheckCircle, Upload } from 'lucide-react';
 import axios from 'axios';
@@ -6,15 +6,15 @@ import useStore from '../store/useStore';
 
 const PropertyVerification = () => {
   const user = useStore((state) => state.user);
-  const [documents, setDocuments] = useState({
-    title: false,
-    inspection: false,
-    appraisal: false,
-    insurance: false
-  });
+  const [documents, setDocuments] = useState([
+    { type: 'stamp_duty', file: null, uploaded: false },
+    { type: 'sale_deed', file: null, uploaded: false }
+  ]);
   const [propertyStatus, setPropertyStatus] = useState('pending');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [selectedOwnership, setSelectedOwnership] = useState('sale_deed');
+  const inputRef = useRef();
 
   useEffect(() => {
     if (!user?.email) return;
@@ -26,10 +26,10 @@ const PropertyVerification = () => {
         });
         setPropertyStatus(response.data.propertyStatus || 'pending');
         if (response.data.documents?.length) {
-          const updatedDocs = response.data.documents.reduce((acc, doc) => {
-            acc[doc.type] = doc.uploaded;
-            return acc;
-          }, { title: false, inspection: false, appraisal: false, insurance: false });
+          const updatedDocs = documents.map(doc => {
+            const found = response.data.documents.find(d => d.type === doc.type);
+            return found ? { ...doc, uploaded: found.uploaded } : doc;
+          });
           setDocuments(updatedDocs);
         }
       } catch (error) {
@@ -40,9 +40,22 @@ const PropertyVerification = () => {
     fetchStatus();
   }, [user]);
 
-  const handleUpload = (doc) => {
-    setDocuments((prev) => ({ ...prev, [doc]: true }));
-    setStatusMessage('Your document upload has been staged. Submit for review when ready.');
+  const handleFileChange = (index, file) => {
+    if (file) {
+      const newDocuments = [...documents];
+      newDocuments[index].file = file;
+      newDocuments[index].uploaded = true;
+      setDocuments(newDocuments);
+    }
+  };
+
+  const handleOwnershipChange = (newType) => {
+    setSelectedOwnership(newType);
+    setDocuments(prev => prev.map(doc => 
+      doc.type === 'sale_deed' || doc.type === 'power_of_attorney' 
+        ? { type: newType, file: null, uploaded: false } 
+        : doc
+    ));
   };
 
   const handleSubmitVerification = async () => {
@@ -51,17 +64,26 @@ const PropertyVerification = () => {
       return;
     }
 
+    const stampDutyUploaded = documents.find(d => d.type === 'stamp_duty').uploaded;
+    const ownershipUploaded = documents.find(d => d.type === selectedOwnership).uploaded;
+
+    if (!stampDutyUploaded || !ownershipUploaded) {
+      setStatusMessage('Please upload Stamp Duty Paid and the selected ownership document.');
+      return;
+    }
+
     setLoading(true);
     try {
-      const formattedDocs = Object.entries(documents).map(([type, uploaded]) => ({
-        type,
-        uploaded,
-        verified: uploaded
-      }));
+      const propertyId = `prop_${Date.now()}`;
+      const submissionDocs = [
+        { type: 'stamp_duty', uploaded: true, verified: true },
+        { type: selectedOwnership, uploaded: true, verified: true }
+      ];
 
       const response = await axios.post('http://localhost:3000/api/user/property', {
         email: user.email,
-        documents: formattedDocs
+        propertyId,
+        documents: submissionDocs
       });
 
       setPropertyStatus(response.data.propertyStatus);
@@ -76,30 +98,22 @@ const PropertyVerification = () => {
 
   const documentCards = [
     {
-      title: 'Property Title',
-      description: 'Upload clear copy of property title deed',
-      icon: FileText,
-      key: 'title'
-    },
-    {
-      title: 'Property Inspection',
-      description: 'Recent property inspection report',
+      title: 'Stamp Duty Paid',
+      description: 'Affidavit confirming stamp duty payment',
       icon: Building2,
-      key: 'inspection'
+      type: 'stamp_duty'
     },
     {
-      title: 'Property Appraisal',
-      description: 'Professional property valuation report',
+      title: selectedOwnership === 'sale_deed' ? 'Sale Deed' : 'Power of Attorney',
+      description: selectedOwnership === 'sale_deed' ? 'Property ownership document' : 'Legal authorization document',
       icon: FileText,
-      key: 'appraisal'
-    },
-    {
-      title: 'Insurance Documents',
-      description: 'Valid property insurance documentation',
-      icon: Building2,
-      key: 'insurance'
+      type: selectedOwnership
     }
   ];
+
+  const stampDutyUploaded = documents.find(d => d.type === 'stamp_duty').uploaded;
+  const ownershipUploaded = documents.find(d => d.type === selectedOwnership).uploaded;
+  const progress = (stampDutyUploaded + ownershipUploaded) / 2 * 100;
 
   return (
     <div className="pt-20 pb-12">
@@ -124,43 +138,84 @@ const PropertyVerification = () => {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {documentCards.map((doc) => (
-            <motion.div
-              key={doc.key}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              whileHover={{ scale: 1.02 }}
-              className={`bg-slate-800/50 rounded-xl p-6 border ${
-                documents[doc.key]
-                  ? 'border-green-500/50'
-                  : 'border-slate-700/50'
-              } backdrop-blur-sm transition-all duration-300`}
-            >
-              <div className="flex items-start space-x-4">
-                <div className={`p-3 rounded-lg ${documents[doc.key] ? 'bg-green-500/20' : 'bg-slate-700/50'}`}>
-                  <doc.icon className={`h-6 w-6 ${documents[doc.key] ? 'text-green-500' : 'text-gray-400'}`} />
+          <div className="md:col-span-2 mb-6">
+            <div className="flex justify-between text-sm text-gray-400 mb-2">
+              <span>Progress</span>
+              <span>{stampDutyUploaded + ownershipUploaded} / 2</span>
+            </div>
+            <div className="w-full bg-slate-700 rounded-full h-2">
+              <div className="bg-purple-500 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
+            </div>
+          </div>
+          {documents.map((doc, index) => {
+            const card = documentCards.find(c => c.type === doc.type);
+            return (
+              <motion.div
+                key={doc.type}
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileHover={{ scale: 1.02 }}
+                className={`bg-slate-800/50 rounded-xl p-6 border ${
+                  doc.uploaded
+                    ? 'border-green-500/50'
+                    : 'border-slate-700/50'
+                } backdrop-blur-sm transition-all duration-300`}
+              >
+                <div className="flex items-start space-x-4">
+                  <div className={`p-3 rounded-lg ${doc.uploaded ? 'bg-green-500/20' : 'bg-slate-700/50'}`}>
+                    <card.icon className={`h-6 w-6 ${doc.uploaded ? 'text-green-500' : 'text-gray-400'}`} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-2">{card.title}</h3>
+                    {card.type === selectedOwnership && (
+                      <select 
+                        value={selectedOwnership} 
+                        onChange={(e) => handleOwnershipChange(e.target.value)} 
+                        className="mb-2 p-2 border rounded bg-slate-700 text-white"
+                      >
+                        <option value="sale_deed">Sale Deed</option>
+                        <option value="power_of_attorney">Power of Attorney</option>
+                      </select>
+                    )}
+                    <p className="text-gray-400 text-sm mb-4">{card.description}</p>
+                    {doc.uploaded ? (
+                      <div className="flex items-center text-green-500">
+                        <CheckCircle className="h-5 w-5 mr-2" />
+                        <span>Document Uploaded</span>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => document.getElementById(`file-${index}`).click()}
+                          className="flex items-center space-x-2 text-blue-400 hover:text-blue-300 transition-colors"
+                        >
+                          <Upload className="h-5 w-5" />
+                          <span>Upload Document</span>
+                        </button>
+                        <input
+                          type="file"
+                          id={`file-${index}`}
+                          onChange={(e) => handleFileChange(index, e.target.files[0])}
+                          style={{ display: 'none' }}
+                        />
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2">{doc.title}</h3>
-                  <p className="text-gray-400 text-sm mb-4">{doc.description}</p>
-                  {documents[doc.key] ? (
-                    <div className="flex items-center text-green-500">
-                      <CheckCircle className="h-5 w-5 mr-2" />
-                      <span>Uploaded successfully</span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleUpload(doc.key)}
-                      className="flex items-center space-x-2 text-blue-400 hover:text-blue-300 transition-colors"
-                    >
-                      <Upload className="h-5 w-5" />
-                      <span>Upload Document</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
+        </div>
+
+        <div className="text-center mt-8">
+          <button
+            onClick={handleSubmitVerification}
+            disabled={loading || !(stampDutyUploaded && ownershipUploaded)}
+            className="bg-purple-500 hover:bg-purple-600 disabled:bg-gray-500 text-white px-8 py-3 rounded-lg font-semibold transition-colors"
+          >
+            {loading ? 'Submitting...' : 'Submit Verification'}
+          </button>
+          {statusMessage && <p className="mt-4 text-gray-400">{statusMessage}</p>}
         </div>
 
         <motion.div
@@ -188,20 +243,6 @@ const PropertyVerification = () => {
           </div>
 
           {statusMessage && <div className="mt-4 text-sm text-gray-300">{statusMessage}</div>}
-
-          <div className="mt-6">
-            <div className="flex items-center justify-between text-sm text-gray-400 mb-2">
-              <span>Document Upload Progress</span>
-              <span>{Object.values(documents).filter(Boolean).length} / 4</span>
-            </div>
-            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${(Object.values(documents).filter(Boolean).length / 4) * 100}%` }}
-                className="h-full bg-blue-500 rounded-full"
-              />
-            </div>
-          </div>
         </motion.div>
       </motion.div>
     </div>

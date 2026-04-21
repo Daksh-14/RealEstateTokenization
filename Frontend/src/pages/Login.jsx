@@ -2,20 +2,30 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, ArrowRight } from 'lucide-react';
+import axios from 'axios';
 import useStore from '../store/useStore';
 
 const Login = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const navigate = useNavigate();
   const setAuth = useStore((state) => state.setAuth);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Simulate authentication
-    setAuth(true, { email });
-    navigate('/dashboard');
+    try {
+      await axios.post('http://localhost:3000/api/user/profile', {
+        email,
+        fullName: isLogin ? fullName : fullName
+      });
+      setAuth(true, { email, fullName });
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Unable to save profile', error);
+      alert('Failed to create or sign in. Please try again.');
+    }
   };
 
   return (
@@ -63,6 +73,8 @@ const Login = () => {
                 <input
                   type="text"
                   placeholder="Full Name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
                   className="w-full bg-slate-700/50 rounded-lg py-3 px-12 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>

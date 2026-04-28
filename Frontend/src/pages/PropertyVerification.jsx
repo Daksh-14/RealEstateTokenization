@@ -14,6 +14,7 @@ const PropertyVerification = () => {
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [selectedOwnership, setSelectedOwnership] = useState('sale_deed');
+  const [showModal, setShowModal] = useState(false);
   const inputRef = useRef();
 
   useEffect(() => {
@@ -88,6 +89,7 @@ const PropertyVerification = () => {
 
       setPropertyStatus(response.data.propertyStatus);
       setStatusMessage(response.data.message);
+      setShowModal(true);
     } catch (error) {
       console.error('Submit property verification failed', error);
       setStatusMessage('Unable to submit property documents.');
@@ -218,32 +220,46 @@ const PropertyVerification = () => {
           {statusMessage && <p className="mt-4 text-gray-400">{statusMessage}</p>}
         </div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="mt-8 bg-slate-800/50 rounded-xl p-6 border border-slate-700/50 backdrop-blur-sm"
-        >
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-semibold mb-2">Verification Status</h3>
-              <p className="text-gray-400 text-sm">
-                {propertyStatus === 'approved'
-                  ? 'Your property documentation is approved.'
-                  : 'Upload your documents and submit them for review.'}
-              </p>
-            </div>
-            <button
-              onClick={handleSubmitVerification}
-              disabled={loading}
-              className="inline-flex items-center justify-center rounded-lg bg-blue-600 px-5 py-3 text-white hover:bg-blue-700 disabled:opacity-75 disabled:cursor-not-allowed"
+        {/* Success Modal */}
+        {showModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-slate-800 rounded-xl p-8 border border-slate-700 max-w-md w-full mx-4 shadow-2xl"
             >
-              {loading ? 'Submitting...' : 'Submit for Review'}
-            </button>
+              <div className="text-center">
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: 'spring' }}
+                  className="inline-block p-4 rounded-full bg-green-500/20 mb-4"
+                >
+                  <CheckCircle className="h-8 w-8 text-green-500" />
+                </motion.div>
+                <h3 className="text-2xl font-bold mb-2 text-white">Verification Submitted!</h3>
+                <p className="text-gray-400 mb-6">
+                  Your property documents have been successfully submitted for review. Our team will verify and validate all documents.
+                </p>
+                <div className="bg-slate-700/50 rounded-lg p-4 mb-6 text-left">
+                  <p className="text-sm text-gray-300 mb-2">
+                    <span className="font-semibold text-gray-200">Status:</span> Pending Review
+                  </p>
+                  <p className="text-sm text-gray-300">
+                    <span className="font-semibold text-gray-200">Email:</span> {user?.email}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="w-full bg-purple-500 hover:bg-purple-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
           </div>
-
-          {statusMessage && <div className="mt-4 text-sm text-gray-300">{statusMessage}</div>}
-        </motion.div>
+        )}
       </motion.div>
     </div>
   );
